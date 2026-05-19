@@ -1,4 +1,4 @@
-# Monkey Language Interpreter
+# An Interpreter written in Go
 
 A tree-walking interpreter written in Go. This project implements a complete interpreter pipeline — from raw source text to a working REPL while employing a test-driven development approach throughout.
 
