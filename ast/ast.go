@@ -147,16 +147,43 @@ func (il *IntegerLiteral) String() string {
 // methods. It satisfies the Expression interface via the Node interface
 // and expressionNode() method.
 type PrefixExpression struct {
+	Token token.Token
 	Operator string
 	Right Expression
 }
 
-var _ Expression
+func (ie *PrefixExpression) expressionNode() {}
+func (ie *PrefixExpression) String() string {
+	var out strings.Builder
+	out.WriteString("{")
+	out.WriteString(ie.Operator)
+	out.WriteString(ie.Right.String())
+	out.WriteString("}")
 
-func (pe *PrefixExpression) expressionNode() {}
-func (pe *PrefixExpression) String() string {
-	return pe.Operator
+	return out.String()
 }
-func (pe *PrefixExpression) TokenLiteral() string {
-	return pe.Operator
+func (ie *PrefixExpression) TokenLiteral() string {
+	return ie.Token.Literal
+}
+
+type InfixExpression struct {
+	Left Expression
+	Token token.Token
+	Operator string
+	Right Expression
+}
+
+func (ie *InfixExpression) expressionNode() {}
+func (ie *InfixExpression) String() string {
+	var out strings.Builder
+	out.WriteString("{")
+	out.WriteString(ie.Left.String())
+	out.WriteString(" " + ie.Operator + " ")
+	out.WriteString(ie.Right.String())
+	out.WriteString("}")
+
+	return out.String()
+}
+func (ie *InfixExpression) TokenLiteral() string {
+	return ie.Token.Literal
 }

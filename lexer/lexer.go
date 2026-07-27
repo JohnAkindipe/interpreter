@@ -104,7 +104,7 @@ func (l *Lexer) NextToken() token.Token {
 			ch := l.ch
 			l.readChar()
 			literal := string(ch) + string(l.ch)
-			tok = token.Token{Type: token.NEQ, Literal: literal}
+			tok = token.Token{Type: token.NOT_EQ, Literal: literal}
 		} else {
 			tok = token.NewToken(token.BANG, l.ch)
 		}
@@ -116,7 +116,7 @@ func (l *Lexer) NextToken() token.Token {
 		tok = token.NewToken(token.LT, l.ch)
 	case '>':
 		tok = token.NewToken(token.GT, l.ch)
-	case 0:
+	case 0x00:
 		tok.Literal = ""
 		tok.Type = token.EOF
 	default:

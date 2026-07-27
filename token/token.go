@@ -8,15 +8,15 @@ const (
 	INT   = "INT"   // 1343456
 	// Operators
 	ASSIGN   = "="
+	BANG     = "!"
 	PLUS     = "+"
 	MINUS    = "-"
-	BANG     = "!"
 	ASTERISK = "*"
 	SLASH    = "/"
 	LT       = "<"
 	GT       = ">"
 	EQ       = "=="
-	NEQ      = "!="
+	NOT_EQ   = "!="
 	// Delimiters
 	COMMA     = ","
 	SEMICOLON = ";"
@@ -33,6 +33,10 @@ const (
 	FALSE    = "FALSE"
 	RETURN   = "RETURN"
 )
+
+var infixOperators = []TokenType{
+	PLUS, MINUS, ASTERISK, SLASH, LT, GT, EQ, NOT_EQ,
+}
 
 var keywords = map[string]TokenType{
 	"fn":     TokenType(FUNCTION),
@@ -63,4 +67,10 @@ func NewToken(typ TokenType, lit byte) Token {
 		Type:    typ,
 		Literal: string(lit),
 	}
+}
+
+func InfixOperators() []TokenType {
+	infixOps := make([]TokenType, len(infixOperators))
+	copy(infixOps, infixOperators)
+	return infixOps
 }

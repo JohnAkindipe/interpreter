@@ -8,8 +8,10 @@ import (
 	"strconv"
 )
 
+type precedence int
+
 const (
-	_ int = iota
+	_ precedence = iota
 	LOWEST
 	EQUALS      // ==
 	LESSGREATER // > or <
@@ -18,6 +20,17 @@ const (
 	PREFIX      // -X or !X
 	CALL        // myFunction(X)
 )
+
+var precedences = map[token.TokenType]precedence{
+	token.EQ: EQUALS,
+	token.NOT_EQ: EQUALS,
+	token.LT: LESSGREATER,
+	token.GT: LESSGREATER,
+	token.PLUS: SUM,
+	token.MINUS: SUM,
+	token.SLASH: PRODUCT,
+	token.ASTERISK: PRODUCT,
+}
 
 type (
 	prefixParseFn func() ast.Expression
@@ -42,9 +55,46 @@ func New(l *lexer.Lexer) *Parser {
 	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
 	p.registerPrefix(token.IDENT, p.parseIdentifier)
 	p.registerPrefix(token.INT, p.parseIntegerLiteral)
-	p.registerPrefix(token.BANG, p.parseBang)
-	p.registerPrefix(token.MINUS, p.parseMinus)
+	p.registerPrefix(token.BANG, p.parsePrefixExpression)
+	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
+	p.infixParseFns = make(map[token.TokenType]infixParseFn)
+	for _, v := range token.InfixOperators() {
+		p.registerInfix(v, p.parseInfixExpression)
+	}
 	return p
+}
+
+func (p *Parser) parsePrefixExpression() ast.Expression {
+	expression := &ast.PrefixExpression{
+		Token: p.curToken,
+		Operator: p.curToken.Literal,
+	}
+
+	p.nextToken()
+
+	expression.Right = p.parseExpression(PREFIX)
+
+	return expression
+}
+
+// This takes the left expression and parses the current token which should
+// be an infix operator. The caller should make sure the current token is the
+// infix (e.g by calling p.nextToken()) operator before calling this function.
+func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
+	expression := &ast.InfixExpression{
+		Token: p.curToken,
+		Operator: p.curToken.Literal,
+		Left: left,
+	}
+
+	precedence := p.curPrecedence()
+	p.nextToken()
+
+	// this is the recursive bit. We entered here by calling parseExpression
+	// we are now calling it from here recursively.
+	expression.Right = p.parseExpression(precedence)
+
+	return expression
 }
 
 func (p *Parser) nextToken() {
@@ -63,6 +113,7 @@ func (p *Parser) ParseProgram() *ast.Program {
 		}
 		p.nextToken()
 	}
+	fmt.Printf("%s%s", p.curToken.Type, p.peekToken.Type)
 	return program
 }
 
@@ -165,15 +216,35 @@ func (p *Parser) parseExpressionStatement() *ast.ExpressionStatement {
 	return stmt
 }
 
+
+func (p *Parser) noPrefixParseFnError(t token.TokenType) {
+	msg := fmt.Sprintf("no prefix parse function for %s found", t)
+	p.errors = append(p.errors, msg)
+}
+
 // This will check if the current token we are parsing has a function to parse
 // it in the prefix position. If it does, we call this fn and return the resulting
 // ast.Expression
-func (p *Parser) parseExpression(precedence int) ast.Expression {
+func (p *Parser) parseExpression(precedence precedence) ast.Expression {
+	// check for prefix fn first.
 	prefix := p.prefixParseFns[p.curToken.Type]
 	if prefix == nil {
+		p.noPrefixParseFnError(p.curToken.Type)
 		return nil
 	}
-	leftExp := prefix()
+	leftExp := prefix() 
+	
+	// then check for infix fn
+	for !p.peekTokenIs(token.SEMICOLON) && precedence < p.peekPrecedence() {
+		infix := p.infixParseFns[p.peekToken.Type]
+		if infix == nil {
+			return leftExp
+		}
+
+		p.nextToken()
+		leftExp = infix(leftExp)
+	}
+
 	return leftExp
 }
 
@@ -189,3 +260,22 @@ func (p *Parser) parseIntegerLiteral() ast.Expression {
 	return lit
 }
 
+// This checks the precedence of the token after the current token
+// if the next token, doesn't have a valid precedence value e.g. if it's a string
+// we return "LOWEST" for precedence which is equal to 1.
+func (p *Parser) peekPrecedence() precedence {
+	if p, ok := precedences[p.peekToken.Type]; ok {
+		return p
+	}
+
+	return LOWEST
+}
+
+// This checks the precedence of the current token
+func (p *Parser) curPrecedence() precedence {
+	if p, ok := precedences[p.curToken.Type]; ok {
+		return p
+	}
+
+	return LOWEST
+}
