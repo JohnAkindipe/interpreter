@@ -72,7 +72,7 @@ func (l *Lexer) NextToken() token.Token {
 	var tok token.Token
 
 	l.skipWhiteSpace()
-	
+
 	switch l.ch {
 	case '=':
 		if l.peekChar() == '=' {
@@ -98,7 +98,7 @@ func (l *Lexer) NextToken() token.Token {
 	case '}':
 		tok = token.NewToken(token.RBRACE, l.ch)
 	case '-':
-		tok = token.NewToken(token.MINUS, l.ch)		
+		tok = token.NewToken(token.MINUS, l.ch)
 	case '!':
 		if l.peekChar() == '=' {
 			ch := l.ch
@@ -124,7 +124,7 @@ func (l *Lexer) NextToken() token.Token {
 			tok.Literal = l.readIdentifier()
 			tok.Type = token.LookupIdent(tok.Literal)
 			return tok
-		} 
+		}
 		if isDigit(l.ch) {
 			tok.Literal = l.readNumber()
 			tok.Type = token.INT

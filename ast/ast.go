@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"fmt"
 	"interpreter/token"
 	"strings"
 )
@@ -42,7 +43,7 @@ func (p *Program) String() string {
 
 type LetStatement struct {
 	Token token.Token
-	Name *Identifier
+	Name  *Identifier
 	Value Expression
 }
 
@@ -84,7 +85,7 @@ func (i *Identifier) String() string {
 // ReturnStatement should start with 'return' keyword followed by
 // a return value which should be an expression. The return value is optional, so it can be nil.
 type ReturnStatement struct {
-	Token token.Token
+	Token       token.Token
 	ReturnValue Expression
 }
 
@@ -92,6 +93,7 @@ func (rs *ReturnStatement) statementNode() {}
 func (rs *ReturnStatement) TokenLiteral() string {
 	return rs.Token.Literal
 }
+
 // Return something like "return 5;".
 func (rs *ReturnStatement) String() string {
 	var out strings.Builder
@@ -109,12 +111,13 @@ func (rs *ReturnStatement) String() string {
 // e.g let x = 5; is a full-blown statement.
 // x + 10; is an expression statement.
 type ExpressionStatement struct {
-	Token token.Token // The first token of the expression
+	Token      token.Token // The first token of the expression
 	Expression Expression
 }
 
 // To implement the Statement interface.
 func (es *ExpressionStatement) statementNode() {}
+
 // To implement the Node interface.
 func (es *ExpressionStatement) TokenLiteral() string {
 	return es.Token.Literal
@@ -127,7 +130,7 @@ func (es *ExpressionStatement) String() string {
 }
 
 // Satisfies Node interface via TokenLiteral() and String() methods.
-// Satisfies Expression interface via Node interface and 
+// Satisfies Expression interface via Node interface and
 // expressionNode() method. IntegerLiteral refers to such thing as
 // "5;". That singular thing is an expression.
 type IntegerLiteral struct {
@@ -135,30 +138,30 @@ type IntegerLiteral struct {
 	Value int64
 }
 
-func (il *IntegerLiteral) expressionNode() {}
+func (il *IntegerLiteral) expressionNode()      {}
 func (il *IntegerLiteral) TokenLiteral() string { return il.Token.Literal }
-func (il *IntegerLiteral) String() string { 
-	return il.Token.Literal 
+func (il *IntegerLiteral) String() string {
+	return il.Token.Literal
 }
 
 // A prefix expression consists of an operator and an expression
-// to the right of the operator. e.g "-5", "!foobar". 
+// to the right of the operator. e.g "-5", "!foobar".
 // It satisfies the Node interface via the String() and TokenLiteral()
 // methods. It satisfies the Expression interface via the Node interface
 // and expressionNode() method.
 type PrefixExpression struct {
-	Token token.Token
+	Token    token.Token
 	Operator string
-	Right Expression
+	Right    Expression
 }
 
 func (ie *PrefixExpression) expressionNode() {}
 func (ie *PrefixExpression) String() string {
 	var out strings.Builder
-	out.WriteString("{")
+	out.WriteString("(")
 	out.WriteString(ie.Operator)
 	out.WriteString(ie.Right.String())
-	out.WriteString("}")
+	out.WriteString(")")
 
 	return out.String()
 }
@@ -167,23 +170,75 @@ func (ie *PrefixExpression) TokenLiteral() string {
 }
 
 type InfixExpression struct {
-	Left Expression
-	Token token.Token
+	Left     Expression
+	Token    token.Token
 	Operator string
-	Right Expression
+	Right    Expression
 }
 
 func (ie *InfixExpression) expressionNode() {}
 func (ie *InfixExpression) String() string {
 	var out strings.Builder
-	out.WriteString("{")
+	out.WriteString("(")
 	out.WriteString(ie.Left.String())
 	out.WriteString(" " + ie.Operator + " ")
 	out.WriteString(ie.Right.String())
-	out.WriteString("}")
+	out.WriteString(")")
 
 	return out.String()
 }
 func (ie *InfixExpression) TokenLiteral() string {
 	return ie.Token.Literal
+}
+
+// A boolean AST node. Satisfies the expression interface
+type Boolean struct {
+	Token token.Token // first token of the boolean node
+	Value bool        // value, either "true" or "false"
+}
+
+func (b *Boolean) expressionNode() {}
+func (b *Boolean) TokenLiteral() string {
+	return b.Token.Literal
+}
+
+func (b *Boolean) String() string {
+	return fmt.Sprintf("%t", b.Value)
+}
+
+type IfExpression struct {
+	Token       token.Token
+	Condition   Expression
+	Consequence *BlockStatement
+	Alternative *BlockStatement // else block
+}
+
+func (ie *IfExpression) expressionNode() {}
+func (ie *IfExpression) TokenLiteral() string { return ie.Token.Literal }
+func (ie *IfExpression) String() string {
+	var out strings.Builder
+	out.WriteString("if")
+	out.WriteString(ie.Condition.String())
+	out.WriteString(" ")
+	out.WriteString(ie.Consequence.String())
+	if ie.Alternative != nil {
+		out.WriteString("else ")
+		out.WriteString(ie.Alternative.String())
+	}
+	return out.String()
+}
+
+type BlockStatement struct {
+	Token      token.Token // the { token
+	Statements []Statement
+}
+
+func (bs *BlockStatement) statementNode()       {}
+func (bs *BlockStatement) TokenLiteral() string { return bs.Token.Literal }
+func (bs *BlockStatement) String() string {
+	var out strings.Builder
+	for _, s := range bs.Statements {
+		out.WriteString(s.String())
+	}
+	return out.String()
 }

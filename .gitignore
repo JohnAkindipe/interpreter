@@ -29,3 +29,7 @@ vendor/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Misc
+/accompanying_code/
+notes.txt

@@ -22,26 +22,26 @@ const (
 )
 
 var precedences = map[token.TokenType]precedence{
-	token.EQ: EQUALS,
-	token.NOT_EQ: EQUALS,
-	token.LT: LESSGREATER,
-	token.GT: LESSGREATER,
-	token.PLUS: SUM,
-	token.MINUS: SUM,
-	token.SLASH: PRODUCT,
+	token.EQ:       EQUALS,
+	token.NOT_EQ:   EQUALS,
+	token.LT:       LESSGREATER,
+	token.GT:       LESSGREATER,
+	token.PLUS:     SUM,
+	token.MINUS:    SUM,
+	token.SLASH:    PRODUCT,
 	token.ASTERISK: PRODUCT,
 }
 
 type (
 	prefixParseFn func() ast.Expression
-	infixParseFn func(ast.Expression) ast.Expression
+	infixParseFn  func(ast.Expression) ast.Expression
 )
 
 type Parser struct {
-	l *lexer.Lexer
-	curToken token.Token
+	l         *lexer.Lexer
+	curToken  token.Token
 	peekToken token.Token
-	errors []string
+	errors    []string
 	// this maps a token type to its associated prefix parse func
 	prefixParseFns map[token.TokenType]prefixParseFn
 	// this maps a token type to its associated infix parse func
@@ -55,8 +55,12 @@ func New(l *lexer.Lexer) *Parser {
 	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
 	p.registerPrefix(token.IDENT, p.parseIdentifier)
 	p.registerPrefix(token.INT, p.parseIntegerLiteral)
+	p.registerPrefix(token.FALSE, p.parseBoolExpression)
+	p.registerPrefix(token.TRUE, p.parseBoolExpression)
 	p.registerPrefix(token.BANG, p.parsePrefixExpression)
 	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
+	p.registerPrefix(token.LPAREN, p.parseGroupedExpression)
+	p.registerPrefix(token.IF, p.parseIfExpression)
 	p.infixParseFns = make(map[token.TokenType]infixParseFn)
 	for _, v := range token.InfixOperators() {
 		p.registerInfix(v, p.parseInfixExpression)
@@ -64,9 +68,21 @@ func New(l *lexer.Lexer) *Parser {
 	return p
 }
 
+func (p *Parser) parseGroupedExpression() ast.Expression {
+	p.nextToken()
+
+	exp := p.parseExpression(LOWEST)
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	return exp
+}
+
 func (p *Parser) parsePrefixExpression() ast.Expression {
 	expression := &ast.PrefixExpression{
-		Token: p.curToken,
+		Token:    p.curToken,
 		Operator: p.curToken.Literal,
 	}
 
@@ -82,9 +98,9 @@ func (p *Parser) parsePrefixExpression() ast.Expression {
 // infix (e.g by calling p.nextToken()) operator before calling this function.
 func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
 	expression := &ast.InfixExpression{
-		Token: p.curToken,
+		Token:    p.curToken,
 		Operator: p.curToken.Literal,
-		Left: left,
+		Left:     left,
 	}
 
 	precedence := p.curPrecedence()
@@ -113,7 +129,7 @@ func (p *Parser) ParseProgram() *ast.Program {
 		}
 		p.nextToken()
 	}
-	fmt.Printf("%s%s", p.curToken.Type, p.peekToken.Type)
+	// fmt.Printf("%s%s", p.curToken.Type, p.peekToken.Type)
 	return program
 }
 
@@ -169,7 +185,7 @@ func (p *Parser) peekTokenIs(t token.TokenType) bool {
 	return p.peekToken.Type == t
 }
 
-// Check the peek token to be the expected type. If so, 
+// Check the peek token to be the expected type. If so,
 // advance the token and return true. Return false otherwise.
 func (p *Parser) expectPeek(t token.TokenType) bool {
 	if p.peekTokenIs(t) {
@@ -216,7 +232,6 @@ func (p *Parser) parseExpressionStatement() *ast.ExpressionStatement {
 	return stmt
 }
 
-
 func (p *Parser) noPrefixParseFnError(t token.TokenType) {
 	msg := fmt.Sprintf("no prefix parse function for %s found", t)
 	p.errors = append(p.errors, msg)
@@ -232,20 +247,20 @@ func (p *Parser) parseExpression(precedence precedence) ast.Expression {
 		p.noPrefixParseFnError(p.curToken.Type)
 		return nil
 	}
-	leftExp := prefix() 
-	
+	exp := prefix()
+
 	// then check for infix fn
 	for !p.peekTokenIs(token.SEMICOLON) && precedence < p.peekPrecedence() {
 		infix := p.infixParseFns[p.peekToken.Type]
 		if infix == nil {
-			return leftExp
+			return exp
 		}
 
 		p.nextToken()
-		leftExp = infix(leftExp)
+		exp = infix(exp)
 	}
 
-	return leftExp
+	return exp
 }
 
 func (p *Parser) parseIntegerLiteral() ast.Expression {
@@ -278,4 +293,78 @@ func (p *Parser) curPrecedence() precedence {
 	}
 
 	return LOWEST
+}
+
+func (p *Parser) parseBoolExpression() ast.Expression {
+	boolExpr := &ast.Boolean{
+		Token: p.curToken,
+	}
+	value, err := strconv.ParseBool(p.curToken.Literal)
+	if err != nil {
+		p.errors = append(p.errors, err.Error())
+	}
+	boolExpr.Value = value
+	return boolExpr
+}
+
+// This will be called by parseExpression() when the token is token.IF
+// We check that the next token is a "(" and advance to the next token.
+// Otherwise, we add an error to the parser errors and return nil. We then
+// advance the token to the next token if (x + 2) {}; the token is on "x" now
+// we then parse expression with lowest precedence. Using this example, this
+// should return an infixExpression - L: "x"; op: "+"; R: "2"; We then check
+// that the next token is ")", else, we add parser error and immediately return nil.
+// we EXPECT (i.e. advance) curr token to be "{" we then parse the block stmt
+// as exp.Consequence. We check if the next token is "else" and advance if it is, 
+// we then EXPECT (i.e. check and advance) the token to be "{", else we return nil, 
+// otherwise we parseBlockStatement again and store this as exp.Alt.
+// and return exp. 
+//
+// If no parsing errors, p.currToken at the end is "}". This is because this is also
+// p.currToken at the end of parseBlockStatement() which is the last fn called inside
+// the fn, either there is an "else" or not.
+func (p *Parser) parseIfExpression() ast.Expression {
+	expression := &ast.IfExpression{Token: p.curToken}
+	if !p.expectPeek(token.LPAREN) {
+		return nil
+	}
+	p.nextToken()
+	expression.Condition = p.parseExpression(LOWEST)
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+	expression.Consequence = p.parseBlockStatement()
+
+	if p.peekTokenIs(token.ELSE) {
+		p.nextToken()
+
+		if !p.expectPeek(token.LBRACE) {
+			return nil
+		}
+		expression.Alternative = p.parseBlockStatement()
+	}
+	return expression
+}
+
+// Consider "if (x + 2) {return x}" This starts with p.curToken as "{". we advance the token
+// and enter a loop. We check that the currToken is not "}" and not ";", we then parse the stmt
+// append it to the block's stmts slice, advance the token and repeat the loop.
+// The loop will stop when the current token is "}" or ";", at this point we have
+// finished parsing the block stmt and we return it.
+// p.currToken at the end is "}"
+func (p *Parser) parseBlockStatement() *ast.BlockStatement {
+	block := &ast.BlockStatement{Token: p.curToken}
+	block.Statements = []ast.Statement{}
+	p.nextToken()
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		stmt := p.parseStatement()
+		if stmt != nil {
+			block.Statements = append(block.Statements, stmt)
+		}
+		p.nextToken()
+	}
+	return block
 }
