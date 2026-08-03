@@ -35,7 +35,7 @@ const (
 )
 
 var infixOperators = []TokenType{
-	PLUS, MINUS, ASTERISK, SLASH, LT, GT, EQ, NOT_EQ,
+	PLUS, MINUS, ASTERISK, SLASH, LT, GT, EQ, NOT_EQ, LPAREN,
 }
 
 var keywords = map[string]TokenType{

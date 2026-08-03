@@ -30,6 +30,7 @@ var precedences = map[token.TokenType]precedence{
 	token.MINUS:    SUM,
 	token.SLASH:    PRODUCT,
 	token.ASTERISK: PRODUCT,
+	token.LPAREN:	CALL,
 }
 
 type (
@@ -61,13 +62,112 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
 	p.registerPrefix(token.LPAREN, p.parseGroupedExpression)
 	p.registerPrefix(token.IF, p.parseIfExpression)
+	p.registerPrefix(token.FUNCTION, p.parseFunctionLiteral)
 	p.infixParseFns = make(map[token.TokenType]infixParseFn)
 	for _, v := range token.InfixOperators() {
+		if v == token.LPAREN {
+			p.registerInfix(v, p.parseCallExpression)
+			continue
+		}
 		p.registerInfix(v, p.parseInfixExpression)
 	}
 	return p
 }
 
+// When this is called p.currToken is token.Func
+func (p *Parser) parseFunctionLiteral() ast.Expression {
+	fnLit := &ast.FunctionLiteral{
+		Token: p.curToken,
+	}
+	if !p.expectPeek(token.LPAREN) {
+		return nil
+	}
+
+	fnLit.Parameters = p.parseFunctionParameters()
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+	fnLit.Body = p.parseBlockStatement()
+
+	return fnLit
+}
+
+// When called, p.currToken is "(". We check if the next token is ")".
+// If it is, we advance currToken to ")" and return. If not, we go to the
+// next token. we store this token in the identifiers slice. In a loop,
+// we check if the next token is ",". If not, we EXPECT that the next token
+// must be ")". If the next token is ",", we advance the token twice, i.e.
+// to the comma and then the next toekn (which should be an ident). We then store
+// this token in the identifiers slice. We return the identifiers slice at the end.
+func (p *Parser) parseFunctionParameters() []*ast.Identifier {
+	identifiers := []*ast.Identifier{}
+
+	if p.peekTokenIs(token.RPAREN) {
+		p.nextToken()
+		return identifiers
+	}
+
+	p.nextToken()
+	identifiers = append(identifiers, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken()
+		p.nextToken()
+		identifiers = append(identifiers, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+	}
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	return identifiers
+}
+
+// We treat "(" as an infix operator separating an identifier or fn
+// literal from it's list of arguments. The currToken when we call this
+// is "(". 
+// A flaw this might have though, somn nonsensical like 3(5) will be considered
+// valid. 3 is an expression, "(" is infix "5" is an expression.
+func (p *Parser) parseCallExpression(fn ast.Expression) ast.Expression {
+	callExp := &ast.CallExpression{
+		Token: p.curToken,
+		Function: fn,
+	}
+
+	callExp.Arguments = p.parseCallArguments()
+	return callExp
+}
+
+// Parses the arguments in a function call, the current token when we
+// call this is "(". It is very similar to parseFunctionParameters (Read the 
+// comments above this function for a thorough description)
+// It makes provision for the possibility that the function may not have
+// any arguments and that it may have one or more args.
+func (p *Parser) parseCallArguments() []ast.Expression {
+	args := []ast.Expression{}
+
+	if p.peekTokenIs(token.RPAREN) {
+		p.nextToken()
+		return args
+	}
+
+	p.nextToken()
+	args = append(args, p.parseExpression(LOWEST))
+
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken()
+		p.nextToken()
+		args = append(args, p.parseExpression(LOWEST))
+	}
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	return args
+}
+// When this is called p.currToken is "("
 func (p *Parser) parseGroupedExpression() ast.Expression {
 	p.nextToken()
 
@@ -315,10 +415,10 @@ func (p *Parser) parseBoolExpression() ast.Expression {
 // should return an infixExpression - L: "x"; op: "+"; R: "2"; We then check
 // that the next token is ")", else, we add parser error and immediately return nil.
 // we EXPECT (i.e. advance) curr token to be "{" we then parse the block stmt
-// as exp.Consequence. We check if the next token is "else" and advance if it is, 
-// we then EXPECT (i.e. check and advance) the token to be "{", else we return nil, 
+// as exp.Consequence. We check if the next token is "else" and advance if it is,
+// we then EXPECT (i.e. check and advance) the token to be "{", else we return nil,
 // otherwise we parseBlockStatement again and store this as exp.Alt.
-// and return exp. 
+// and return exp.
 //
 // If no parsing errors, p.currToken at the end is "}". This is because this is also
 // p.currToken at the end of parseBlockStatement() which is the last fn called inside
