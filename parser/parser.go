@@ -244,6 +244,9 @@ func (p *Parser) parseStatement() ast.Statement {
 	}
 }
 
+// parseLetStatement parses a Let statement. When called, the current token should be
+// token.LET. We expect the next token to be an identifier, followed by token.ASSIGN.
+// Personal note: Possibly implement let not to need an assignment, e.g. let x;
 func (p *Parser) parseLetStatement() *ast.LetStatement {
 	stmt := &ast.LetStatement{Token: p.curToken}
 	if !p.expectPeek(token.IDENT) {
@@ -255,23 +258,29 @@ func (p *Parser) parseLetStatement() *ast.LetStatement {
 		return nil
 	}
 
-	//TODO: We're skipping the expressions until we encounter a semicolon
-	for !p.curTokenIs(token.SEMICOLON) {
+	p.nextToken()
+
+	stmt.Value = p.parseExpression(LOWEST)
+
+	if p.peekTokenIs(token.SEMICOLON) {
 		p.nextToken()
 	}
+
 	return stmt
 }
 
+// parseReturnStatement parses a return statement. When called, the current token should be
+// token.RETURN. 
 func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
 	stmt := &ast.ReturnStatement{Token: p.curToken}
 	p.nextToken()
 
-	//TODO: Skipping expression parsing for now
-	//continue iterating until we encounter a semicolon
+	stmt.ReturnValue = p.parseExpression(LOWEST)
 
-	for !p.curTokenIs(token.SEMICOLON) {
+	if p.peekTokenIs(token.SEMICOLON) {
 		p.nextToken()
 	}
+
 	return stmt
 }
 
